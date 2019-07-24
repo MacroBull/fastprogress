@@ -14,20 +14,31 @@ MAX_COLS = 160
 def isnotebook():
     try:
         from google import colab
-        return True
+        return True, stdout.isatty()
     except: pass
     try:
         shell = get_ipython().__class__.__name__
         if shell == 'ZMQInteractiveShell':
-            return True   # Jupyter notebook, Spyder or qtconsole
+            env = os.environ
+            program = os.path.basename(env['_'])
+            if program == 'spyder':
+                assert 'SPYDER_ARGS' in env
+                print('fastprogress: spyder is not notebook')
+                return False, True # Spyder
+            if program in ('ipython', 'jupyter'):
+                if 'JPY_PARENT_PID' in env:
+                    print('fastprogress: notebook is notebook')
+                    return True, False # Jupyter notebook
+            print('fastprogress: qtconsole is not notebook')
+            return False, True  # Jupyter qtconsole
         elif shell == 'TerminalInteractiveShell':
-            return False  # Terminal running IPython
+            return False, stdout.isatty()  # Terminal running IPython
         else:
-            return False  # Other type (?)
+            return False, stdout.isatty()  # Other type (?)
     except NameError:
-        return False      # Probably standard Python interpreter
+        return False, stdout.isatty()      # Probably standard Python interpreter
 
-IN_NOTEBOOK = isnotebook()
+IN_NOTEBOOK, IS_A_TTY = isnotebook()
 if IN_NOTEBOOK:
     try:
         from IPython.display import clear_output, display, HTML
@@ -226,6 +237,7 @@ class NBMasterBar(MasterBar):
         rows = len(imgs)//cols if len(imgs)%cols == 0 else len(imgs)//cols + 1
         plt.close()
         if figsize is None: figsize = (imgsize*cols, imgsize*rows)
+        print('fastprogress: show_imgs.plt\n\n')
         self.fig, axs = plt.subplots(rows, cols, figsize=figsize)
         if titles is None: titles = [None] * len(imgs)
         for img, ax, title in zip(imgs, axs.flatten(), titles): img.show(ax=ax, title=title)
@@ -235,6 +247,7 @@ class NBMasterBar(MasterBar):
 
     def update_graph(self, graphs, x_bounds=None, y_bounds=None, figsize=(6,4)):
         if self.hide_graph: return
+        print('fastprogress: update_graph.plt\n\n')
         if not hasattr(self, 'fig'):
             self.fig, self.ax = plt.subplots(1, figsize=figsize)
             self.out2 = display(self.ax.figure, display_id=True)
@@ -312,7 +325,7 @@ def print_and_maybe_save(line):
         with open(SAVE_PATH, attr) as f: f.write(line + '\n')
 
 def printing():
-    return False if NO_BAR else (stdout.isatty() or IN_NOTEBOOK)
+    return False if NO_BAR else (IS_A_TTY or IN_NOTEBOOK)
 
 if IN_NOTEBOOK: master_bar, progress_bar = NBMasterBar, NBProgressBar
 else:           master_bar, progress_bar = ConsoleMasterBar, ConsoleProgressBar
